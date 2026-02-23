@@ -418,9 +418,13 @@ with tab5:
 
     pat_ok = True
     for sid in df_all['section_id'].unique():
-        ps = df_all[df_all['section_id']==sid].groupby('week', include_groups=False).apply(
-            lambda x: frozenset(zip(x['day'],x['slot']))).unique()
-        if len(ps)>1: pat_ok=False; break
+        sec_df = df_all[df_all['section_id'] == sid][['week','day','slot']]
+        ps = sec_df.groupby('week')[['day','slot']] \
+            .apply(lambda x: frozenset(zip(x['day'], x['slot']))) \
+            .unique()
+        if len(ps) > 1:
+            pat_ok = False
+            break
     checks.append(("Recurring weekly pattern", "✓" if pat_ok else "Varies", pat_ok))
 
     bad = (~df_all['slot'].isin(set(WD_SLOTS+SUN_SLOTS))).sum()
