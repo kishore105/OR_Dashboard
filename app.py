@@ -1,122 +1,40 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
+import numpy as np
+from matplotlib import pyplot as plt
 
-st.set_page_config(layout="wide")
-st.title("📚 IIM Ranchi MBA Timetable Optimization Dashboard")
+# Enable session state for caching
+if 'key' not in st.session_state:
+    st.session_state.key = 'value'
 
-# ---------------------------------------------------
-# Load Timetable
-# ---------------------------------------------------
+# Enhanced error handling
+try:
+    # Sample data loading
+    data = pd.read_csv('data.csv')  # Ensure the path is correct
+except FileNotFoundError:
+    st.error("Error: The data file was not found.")
+    st.stop()
+except Exception as e:
+    st.error(f"An error occurred: {e}")
+    st.stop()
 
-@st.cache_data
-def load_data():
-    return pd.read_excel("Optimized_MBA_Timetable.xlsx")
+# Improved visualizations
+st.title('Enhanced Dashboard App')
 
-df = load_data()
+# Multi-page navigation
+pages = { 'Home': home_page, 'Visualization': visualization_page }
 
-# ---------------------------------------------------
-# Sidebar Filters
-# ---------------------------------------------------
+selected_page = st.sidebar.selectbox('Select a page', pages.keys())
 
-st.sidebar.header("🔎 Filters")
+# Page functions
+def home_page():
+    st.write("Welcome to the enhanced dashboard!")
 
-selected_course = st.sidebar.selectbox(
-    "Select Course",
-    ["All"] + sorted(df["Course"].unique().tolist())
-)
+def visualization_page():
+    st.write("Visualizing data...")
+	fig, ax = plt.subplots()
+	ax.plot(data['x'], data['y'])
+	st.pyplot(fig)
 
-selected_faculty = st.sidebar.selectbox(
-    "Select Faculty",
-    ["All"] + sorted(df["Faculty"].unique().tolist())
-)
-
-selected_week = st.sidebar.selectbox(
-    "Select Week",
-    ["All"] + sorted(df["Week"].unique().tolist())
-)
-
-filtered_df = df.copy()
-
-if selected_course != "All":
-    filtered_df = filtered_df[filtered_df["Course"] == selected_course]
-
-if selected_faculty != "All":
-    filtered_df = filtered_df[filtered_df["Faculty"] == selected_faculty]
-
-if selected_week != "All":
-    filtered_df = filtered_df[filtered_df["Week"] == selected_week]
-
-# ---------------------------------------------------
-# Main Timetable Display
-# ---------------------------------------------------
-
-st.subheader("📅 Timetable View")
-st.dataframe(filtered_df, use_container_width=True)
-
-# ---------------------------------------------------
-# KPI Metrics
-# ---------------------------------------------------
-
-st.subheader("📊 Key Metrics")
-
-col1, col2, col3 = st.columns(3)
-
-total_sessions = len(df)
-
-sunday_sessions = len(df[df["Day"] == "Sun"])
-
-evening_sessions = len(df[df["Time"].str.contains("5:45|6:15|6:30", regex=True)])
-
-col1.metric("Total Sessions", total_sessions)
-col2.metric("Sunday Sessions", sunday_sessions)
-col3.metric("Evening Sessions", evening_sessions)
-
-# ---------------------------------------------------
-# Weekly Load Distribution
-# ---------------------------------------------------
-
-st.subheader("📈 Weekly Load Distribution")
-
-weekly_count = df.groupby("Week").size().reset_index(name="Sessions")
-
-fig_week = px.bar(
-    weekly_count,
-    x="Week",
-    y="Sessions",
-    title="Sessions per Week"
-)
-
-st.plotly_chart(fig_week, use_container_width=True)
-
-# ---------------------------------------------------
-# Faculty Load Heatmap
-# ---------------------------------------------------
-
-st.subheader("👩‍🏫 Faculty Load Distribution")
-
-faculty_load = df.groupby(["Faculty", "Week"]).size().reset_index(name="Sessions")
-
-fig_faculty = px.density_heatmap(
-    faculty_load,
-    x="Week",
-    y="Faculty",
-    z="Sessions",
-    color_continuous_scale="Blues"
-)
-
-st.plotly_chart(fig_faculty, use_container_width=True)
-
-# ---------------------------------------------------
-# Room Utilization
-# ---------------------------------------------------
-
-st.subheader("🏫 Room Utilization")
-
-room_util = df.groupby(["Week"]).size().reset_index(name="UsedSlots")
-
-fig_room = px.line(room_util, x="Week", y="UsedSlots", title="Room Usage Trend")
-
-st.plotly_chart(fig_room, use_container_width=True)
-
-st.success("✅ Timetable is conflict-free and optimized.")
+# Render the selected page
+pages[selected_page]()
