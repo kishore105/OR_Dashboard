@@ -418,7 +418,7 @@ with tab5:
 
     pat_ok = True
     for sid in df_all['section_id'].unique():
-        ps = df_all[df_all['section_id']==sid].groupby('week').apply(
+        ps = df_all[df_all['section_id']==sid].groupby('week', include_groups=False).apply(
             lambda x: frozenset(zip(x['day'],x['slot']))).unique()
         if len(ps)>1: pat_ok=False; break
     checks.append(("Recurring weekly pattern", "✓" if pat_ok else "Varies", pat_ok))
