@@ -248,89 +248,160 @@ with tab1:
     with col_d:
         grid_day = st.selectbox("Filter Day", ["All"] + s.DAYS, key="grid_day")
 
-    # Build grid data
-    grid_rows = []
+    # ── dept → background hex ────────────────────────────────────────────────
+    _DEPT_BG = {
+        "Finance":      "#BBDEFB",
+        "Marketing":    "#FFF9C4",
+        "IT/Analytics": "#C8E6C9",
+        "HR/OB":        "#E1BEE7",
+        "Operations":   "#FFE0B2",
+        "Strategy":     "#F5F5F5",
+    }
+
+    # Build per-cell content: (week, day, slot, room) → display string + dept
+    cell_map = {}
     for sec in sections:
-        dept = s.DEPT_MAP.get(sec['code'], 'Other')
+        dept = s.DEPT_MAP.get(sec["code"], "Other")
         if dept not in sel_depts:
             continue
-        for sess in sec['sessions_scheduled']:
-            if sess['week'] != sel_week:
+        for sess in sec["sessions_scheduled"]:
+            if sess["week"] != sel_week:
                 continue
-            if grid_day != "All" and sess['day'] != grid_day:
+            if grid_day != "All" and sess["day"] != grid_day:
                 continue
-            fac = sess.get('faculty', sec['faculty'])
-            fac_short = fac.replace("Prof.", "").strip()
-            grid_rows.append({
-                'Day':     sess['day'],
-                'Time':    s.SLOT_DISPLAY.get(sess['slot'], sess['slot']),
-                'Slot':    sess['slot'],
-                'Room':    sess['classroom'],
-                'Section': sec['id'],
-                'Course':  sec['name'],
-                'Faculty': fac_short,
-                'Dept':    dept,
-                'Students': len(sec['students']),
-            })
+            fac = sess.get("faculty", sec["faculty"]).replace("Prof.", "").strip()
+            key = (sess["day"], sess["slot"], sess["classroom"])
+            existing = cell_map.get(key, "")
+            label = f"<b>{sec['id']}</b><br>{sec['name'][:22]}<br><i>{fac[:18]}</i>"
+            cell_map[key] = {"label": label, "dept": dept}
 
-    if grid_rows:
-        df_grid = pd.DataFrame(grid_rows)
-        df_grid['DayOrder'] = df_grid['Day'].map({d: i for i, d in enumerate(s.DAYS)})
-        df_grid = df_grid.sort_values(['DayOrder', 'Slot', 'Room'])
+    # Determine actual rooms used (only those with data, not all 10)
+    used_rooms = sorted(
+        {k[2] for k in cell_map},
+        key=lambda r: int(r.replace("CR", ""))
+    )
+    slots_order = s.WEEKDAY_SLOTS  # use weekday slots as row order
+    days_to_show = [d for d in s.DAYS if grid_day == "All" or d == grid_day]
 
-        # Pivot: Day × Time → cells
-        pivot = df_grid.pivot_table(
-            index=['Day', 'Time'],
-            columns='Room',
-            values='Section',
-            aggfunc=lambda x: ' / '.join(x),
-        ).reset_index()
+    if not cell_map:
+        st.info("No sessions match the current filters.")
+    else:
+        # Build a plotly go.Table with correct room columns
+        header_vals = ["<b>Day</b>", "<b>Time Slot</b>"] + [f"<b>{r}</b>" for r in used_rooms]
 
-        # Colour-code using plotly table
-        days_order = [d for d in s.DAYS if d in df_grid['Day'].values]
-        rooms_in_week = s.get_classrooms(sel_week)
+        col_day, col_time = [], []
+        col_rooms = {r: [] for r in used_rooms}
+        col_colors_day, col_colors_time = [], []
+        col_colors_rooms = {r: [] for r in used_rooms}
+
+        # Build rows: iterate day → slot
+        DAY_ALT = ["#E3F2FD", "#E8F5E9"]  # alternate day bg
+        prev_day = None
+        day_idx = 0
+        for day in days_to_show:
+            slots = s.SUNDAY_SLOTS if day == "Sunday" else s.WEEKDAY_SLOTS
+            for slot in slots:
+                time_label = s.SLOT_DISPLAY.get(slot, slot)
+                # lunch separator row
+                is_lunch_gap = (slot == "14:45")
+                row_bg = DAY_ALT[day_idx % 2]
+
+                col_day.append(f"<b>{day}</b>" if slot == slots[0] else "")
+                col_time.append(("🍽 LUNCH BREAK 14:00–14:45  ↕  " + time_label)
+                                 if is_lunch_gap else time_label)
+                col_colors_day.append("#B3E5FC" if slot == slots[0] else row_bg)
+                col_colors_time.append("#FFF8E1" if is_lunch_gap else row_bg)
+
+                for r in used_rooms:
+                    info = cell_map.get((day, slot, r))
+                    if info:
+                        col_rooms[r].append(info["label"])
+                        col_colors_rooms[r].append(_DEPT_BG.get(info["dept"], "#F5F5F5"))
+                    else:
+                        col_rooms[r].append("")
+                        col_colors_rooms[r].append(row_bg)
+
+            if day in days_to_show:
+                day_idx += 1
+
+        total_rows = len(col_day)
 
         fig = go.Figure(data=[go.Table(
+            columnwidth=[80, 140] + [110] * len(used_rooms),
             header=dict(
-                values=['<b>Day</b>', '<b>Time Slot</b>'] + [f'<b>{r}</b>' for r in rooms_in_week],
-                fill_color='#0D47A1',
-                font=dict(color='white', size=12),
-                align='center', height=32,
+                values=header_vals,
+                fill_color="#0D47A1",
+                font=dict(color="white", size=11, family="Arial Bold"),
+                align="center",
+                height=36,
+                line_color="#1565C0",
+                line_width=2,
             ),
             cells=dict(
-                values=[
-                    [row['Day'] for _, row in pivot.iterrows()],
-                    [row['Time'] for _, row in pivot.iterrows()],
-                ] + [
-                    [row.get(r, '') if pd.notna(row.get(r, '')) else ''
-                     for _, row in pivot.iterrows()]
-                    for r in rooms_in_week
-                ],
-                fill_color=[
-                    ['#E3F2FD'] * len(pivot),
-                    ['#E3F2FD'] * len(pivot),
-                ] + [['#F5F5F5'] * len(pivot) for _ in rooms_in_week],
-                align='center',
-                font=dict(size=10),
-                height=26,
-            )
+                values=(
+                    [col_day, col_time]
+                    + [col_rooms[r] for r in used_rooms]
+                ),
+                fill_color=(
+                    [col_colors_day, col_colors_time]
+                    + [col_colors_rooms[r] for r in used_rooms]
+                ),
+                align=["center", "center"] + ["center"] * len(used_rooms),
+                font=dict(size=9, family="Arial", color="black"),
+                height=56,
+                line_color="#BDBDBD",
+                line_width=1,
+            ),
         )])
-        fig.update_layout(margin=dict(t=10, b=10, l=0, r=0), height=max(400, len(pivot)*28+60))
+
+        fig.update_layout(
+            margin=dict(t=8, b=8, l=0, r=0),
+            height=max(600, total_rows * 60 + 100),
+            paper_bgcolor="white",
+            plot_bgcolor="white",
+        )
         st.plotly_chart(fig, use_container_width=True)
 
-        # Also show as searchable dataframe
-        with st.expander("📋 Detailed session list"):
-            st.dataframe(
-                df_grid[['Day','Time','Room','Section','Course','Faculty','Students']],
-                use_container_width=True,
-                hide_index=True,
-            )
+        # Legend
+        st.markdown(
+            " &nbsp;&nbsp; ".join(
+                f'<span style="background:{bg};padding:2px 8px;border-radius:4px;font-size:0.8rem">{dept}</span>'
+                for dept, bg in _DEPT_BG.items()
+            ),
+            unsafe_allow_html=True,
+        )
+        st.markdown("")
 
-        # Lunch break note
-        st.info("🍽️  **Mandatory 45-min Lunch Break** 14:00–14:45 between Slots 3 & 4  |  "
-                "Sunday ends by 16:15 ✓  |  Last weekday class ends 19:45 ✓")
-    else:
-        st.info("No sessions match the current filters.")
+        # Searchable detail table
+        with st.expander("📋 Full session list (searchable)"):
+            detail_rows = []
+            for sec in sections:
+                dept = s.DEPT_MAP.get(sec["code"], "Other")
+                if dept not in sel_depts: continue
+                for sess in sec["sessions_scheduled"]:
+                    if sess["week"] != sel_week: continue
+                    if grid_day != "All" and sess["day"] != grid_day: continue
+                    detail_rows.append({
+                        "Day": sess["day"],
+                        "Time": s.SLOT_DISPLAY.get(sess["slot"], sess["slot"]),
+                        "Room": sess["classroom"],
+                        "Section": sec["id"],
+                        "Course": sec["name"],
+                        "Faculty": sess.get("faculty", sec["faculty"]).replace("Prof.","").strip(),
+                        "Dept": dept,
+                        "Students": len(sec["students"]),
+                    })
+            if detail_rows:
+                df_det = pd.DataFrame(detail_rows)
+                df_det["_DayOrd"] = df_det["Day"].map({d: i for i, d in enumerate(s.DAYS)})
+                df_det = df_det.sort_values(["_DayOrd","Time","Room"]).drop(columns=["_DayOrd"])
+                st.dataframe(df_det, use_container_width=True, hide_index=True)
+
+        st.info(
+            "🍽️  **45-min Lunch Break** 14:00–14:45 (between Slots 3 & 4)  |  "
+            "Sunday ends 16:15 ✓  |  Last class 19:45 ✓  |  "
+            f"Rooms used this week: {', '.join(used_rooms)}"
+        )
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 2 – ANALYTICS
