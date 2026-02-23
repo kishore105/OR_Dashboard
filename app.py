@@ -19,8 +19,24 @@ st.set_page_config(
 )
 
 # ── IMPORT SOLVER ──────────────────────────────────────────────────────────────
-sys.path.insert(0, os.path.dirname(__file__))
-import solver as s  # our solver module (renamed from timetable_final)
+# Dynamically load the solver regardless of what the file is named in the repo.
+# Supports: solver.py, OR_Timetable_Solver.py, timetable_final.py
+import importlib, importlib.util
+
+_base = os.path.dirname(os.path.abspath(__file__))
+_candidates = ["solver", "OR_Timetable_Solver", "timetable_final"]
+s = None
+for _name in _candidates:
+    _path = os.path.join(_base, _name + ".py")
+    if os.path.exists(_path):
+        _spec = importlib.util.spec_from_file_location("solver_module", _path)
+        s = importlib.util.module_from_spec(_spec)
+        _spec.loader.exec_module(s)
+        break
+
+if s is None:
+    st.error("Cannot find solver file. Repo needs solver.py, OR_Timetable_Solver.py, or timetable_final.py")
+    st.stop()
 
 # ── CUSTOM CSS ─────────────────────────────────────────────────────────────────
 st.markdown("""
