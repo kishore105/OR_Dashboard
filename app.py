@@ -489,8 +489,9 @@ with tab6:
                                mime="text/csv", use_container_width=True)
     st.markdown("#### 👨‍🏫 Full Faculty Schedule CSV")
     fc_csv = df_all[['faculty','section_id','course','week','day',
-                     'time_label','room','dept']].sort_values(
-        ['faculty','week','day_order']).to_csv(index=False).encode()
+                 'time_label','room','dept','day_order']].sort_values(
+    ['faculty','week','day_order']
+).drop(columns=['day_order']).to_csv(index=False).encode()
     st.download_button("⬇️  faculty_schedule.csv", data=fc_csv,
                        file_name="faculty_schedule.csv",
                        mime="text/csv", use_container_width=True)
