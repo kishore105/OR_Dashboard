@@ -57,7 +57,11 @@ st.markdown("""
 @st.cache_data(show_spinner="📂  Loading timetable…")
 def load_from_excel(path: str) -> pd.DataFrame:
     """Parse Faculty Schedule sheet → flat 940-row DataFrame."""
-    df_raw = pd.read_excel(path, sheet_name='Faculty Schedule', header=None)
+    xl_file = pd.ExcelFile(path)
+    fac_sheet = next((s for s in xl_file.sheet_names if 'Faculty Schedule' in s), None)
+    if fac_sheet is None:
+        raise ValueError(f"No 'Faculty Schedule' sheet found. Available: {xl_file.sheet_names}")
+    df_raw = pd.read_excel(path, sheet_name=fac_sheet, header=None)
     sessions, current_faculty = [], None
     skip_labels = {
         'nan','','Section','Faculty Teaching Schedule',
@@ -418,13 +422,9 @@ with tab5:
 
     pat_ok = True
     for sid in df_all['section_id'].unique():
-        sec_df = df_all[df_all['section_id'] == sid][['week','day','slot']]
-        ps = sec_df.groupby('week')[['day','slot']] \
-            .apply(lambda x: frozenset(zip(x['day'], x['slot']))) \
-            .unique()
-        if len(ps) > 1:
-            pat_ok = False
-            break
+        ps = df_all[df_all['section_id']==sid].groupby('week').apply(
+            lambda x: frozenset(zip(x['day'],x['slot']))).unique()
+        if len(ps)>1: pat_ok=False; break
     checks.append(("Recurring weekly pattern", "✓" if pat_ok else "Varies", pat_ok))
 
     bad = (~df_all['slot'].isin(set(WD_SLOTS+SUN_SLOTS))).sum()
@@ -493,9 +493,8 @@ with tab6:
                                mime="text/csv", use_container_width=True)
     st.markdown("#### 👨‍🏫 Full Faculty Schedule CSV")
     fc_csv = df_all[['faculty','section_id','course','week','day',
-                 'time_label','room','dept','day_order']].sort_values(
-    ['faculty','week','day_order']
-).drop(columns=['day_order']).to_csv(index=False).encode()
+                     'time_label','room','dept']].sort_values(
+        ['faculty','week','day_order']).to_csv(index=False).encode()
     st.download_button("⬇️  faculty_schedule.csv", data=fc_csv,
                        file_name="faculty_schedule.csv",
                        mime="text/csv", use_container_width=True)
