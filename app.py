@@ -492,9 +492,10 @@ with tab6:
                                file_name="filtered_sessions.csv",
                                mime="text/csv", use_container_width=True)
     st.markdown("#### 👨‍🏫 Full Faculty Schedule CSV")
-    fc_csv = df_all[['faculty','section_id','course','week','day',
-                     'time_label','room','dept']].sort_values(
-        ['faculty','week','day_order']).to_csv(index=False).encode()
+    _fc = df_all[['faculty','section_id','course','week','day',
+                  'time_label','room','dept']].copy()
+    _fc['_d'] = _fc['day'].map({d:i for i,d in enumerate(DAYS)})
+    fc_csv = _fc.sort_values(['faculty','week','_d']).drop(columns=['_d']).to_csv(index=False).encode()
     st.download_button("⬇️  faculty_schedule.csv", data=fc_csv,
                        file_name="faculty_schedule.csv",
                        mime="text/csv", use_container_width=True)
